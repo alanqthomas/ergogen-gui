@@ -1,8 +1,6 @@
-import React, {createContext, Dispatch, SetStateAction, useCallback, useContext, useEffect, useState} from 'react';
-import { DebouncedFunc } from "lodash-es";
-import yaml from "js-yaml";
-import debounce from "lodash.debounce";
+import React, {createContext, Dispatch, SetStateAction, useCallback, useContext, useEffect, useRef, useState} from 'react';
 import { useLocalStorage } from 'react-use';
+import { useDebounce } from 'use-debounce';
 
 type Props = {
     initialInput: string,
@@ -14,9 +12,11 @@ type Results = { [key: string]: any|Results };
 type ContextProps = {
     configInput: string | undefined,
     setConfigInput: Dispatch<SetStateAction<string | undefined>>,
-    processInput: DebouncedFunc<(textInput: string | undefined, options?: ProcessOptions) => Promise<void>>,
+    processInput: (textInput: string | undefined, options?: ProcessOptions) => void,
     error: string | null,
     results: Results | null,
+    language: string,
+    isProcessing: boolean,
     debug: boolean,
     setDebug: Dispatch<SetStateAction<boolean>>,
     autoGen: boolean,
@@ -26,92 +26,64 @@ type ContextProps = {
 };
 
 type ProcessOptions = {
-    pointsonly: boolean
+    pointsOnly: boolean
+    debug?: boolean
 };
+
+export interface WorkerResponseMsg {
+    results: Results | null
+    language: string | null
+    error: string | null
+}
+
+export interface WorkerInputMsg {
+    textInput: string | undefined
+    options: ProcessOptions
+}
 
 export const ConfigContext = createContext<ContextProps | null>(null);
 export const CONFIG_LOCAL_STORAGE_KEY = 'LOCAL_STORAGE_CONFIG'
 
 const ConfigContextProvider = ({initialInput, children}: Props) => {
     const [configInput, setConfigInput] = useLocalStorage<string>(CONFIG_LOCAL_STORAGE_KEY, initialInput);
+    const [debouncedConfigInput] = useDebounce(configInput, 500);
     const [error, setError] = useState<string|null>(null);
     const [results, setResults] = useState<Results|null>(null);
+    const [language, setLanguage] = useState<string>('yaml');
     const [debug, setDebug] = useState<boolean>(true);
     const [autoGen, setAutoGen] = useState<boolean>(true);
     const [autoGen3D, setAutoGen3D] = useState<boolean>(false);
+    const [isProcessing, setIsProcessing] = useState<boolean>(false);
+    const workerRef = useRef<Worker | null>(null);
 
-
-    const parseConfig = (inputString: string): [string, { [key: string]: any[] }] => {
-        let type = 'UNKNOWN';
-        let parsedConfig = null;
-
-        try {
-            parsedConfig = JSON.parse(inputString);
-            type = 'JSON';
-        } catch (e: unknown) {
-            // Input is not valid JSON
-        }
-
-        try {
-            parsedConfig = yaml.load(inputString);
-            type = 'YAML';
-        } catch (e: unknown) {
-            // Input is not valid YAML
-        }
-
-        return [type, parsedConfig]
-    };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const processInput = useCallback(
-        debounce(async (textInput: string | undefined, options: ProcessOptions = { pointsonly: true }) => {
-            let results = null;
-            let inputConfig: string | {} = textInput ?? '';
-            const [,parsedConfig] = parseConfig(textInput ?? '');
-
-            setError(null);
-
-            // When running this as part of onChange we only send 'points', 'units' and 'variables' to generate a preview
-            // If there is no 'points' key we send the input to Ergogen as-is, it could be KLE or invalid.
-            if (parsedConfig?.points && options?.pointsonly) {
-                inputConfig = {
-                    points: {...parsedConfig?.points},
-                    units: {...parsedConfig?.units},
-                    variables: {...parsedConfig?.variables},
-                    outlines: {...parsedConfig?.outlines}
-                };
+    const processInput = useCallback((
+        textInput: string | undefined,
+        options: ProcessOptions = { pointsOnly: true, debug: false },
+    ) => {
+        const msg: WorkerInputMsg = { textInput, options };
+        const worker = new Worker(new URL('../workers/worker.ts', import.meta.url));
+        setIsProcessing(true);
+        workerRef.current?.terminate();
+        workerRef.current = worker;
+        worker.postMessage(msg);
+        worker.onmessage = ({ data: { error, results, language } }: MessageEvent<WorkerResponseMsg>) => {
+            if (language) {
+                setLanguage(language);
             }
 
-            try {
-                results = await window.ergogen.process(
-                    inputConfig,
-                    debug, // debug
-                    (m: string) => console.log(m) // logger
-                );
-            } catch (e: unknown) {
-                if(!e) return;
-
-                if (typeof e === "string"){
-                    setError(e);
-                }
-                if (typeof e === "object"){
-                    // @ts-ignore
-                    setError(e.toString());
-                }
-                return;
-            }
-
-            setResults(results);
-
-        }, 300),
-        [window.ergogen]
-    );
+            setError(error)
+            setResults(results)
+            setIsProcessing(false);
+        };
+    }, [workerRef]);
 
     useEffect(() => {
-        if(autoGen) {
-            processInput(configInput, { pointsonly: !autoGen3D });
+        if (autoGen) {
+            processInput(debouncedConfigInput, { pointsOnly: !autoGen3D, debug });
         }
-    }, [configInput, processInput, autoGen, autoGen3D]);
+    }, [debouncedConfigInput, autoGen, autoGen3D]);
 
 
     return (
@@ -122,6 +94,8 @@ const ConfigContextProvider = ({initialInput, children}: Props) => {
                 processInput,
                 error,
                 results,
+                language,
+                isProcessing,
                 debug,
                 setDebug,
                 autoGen,

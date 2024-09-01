@@ -9,6 +9,7 @@ import FilePreview from "./molecules/FilePreview";
 import {useConfigContext} from "./context/ConfigContext";
 import Button from "./atoms/Button";
 import Select from "react-select";
+import Spinner from './atoms/Spinner';
 import GenOption from "./atoms/GenOption";
 import {ConfigOption, exampleOptions} from "./examples";
 
@@ -93,14 +94,16 @@ const Ergogen = () => {
     const [selectedOption, setSelectedOption] = useState<ConfigOption|null>(null);
     const configContext = useConfigContext();
 
-    useEffect(()=>{
-        if(selectedOption?.value) {
-            configContext?.setConfigInput(selectedOption.value)
-        }
-    }, [selectedOption, configContext]);
+    const onSelectionChange = (newValue: ConfigOption|null) => {
+      if(newValue?.value) {
+        setSelectedOption(newValue)
+        configContext?.setConfigInput(newValue.value)
+      }
+    }
 
     if (!configContext) return null;
 
+    const { isProcessing } = configContext
 
     let walkArray = configContext?.results;
     // Walk through the JSON keys until we get the content of the desired previewKey
@@ -123,11 +126,11 @@ const Ergogen = () => {
                             options={exampleOptions}
                             value={selectedOption}
                             // @ts-ignore
-                            onChange={(newValue: ConfigOption|null) => setSelectedOption(newValue)}
+                            onChange={onSelectionChange}
                             placeholder={"Paste your config below, or select an example here!"}
                         />
                         <StyledConfigEditor/>
-                        <Button onClick={() => configContext?.processInput(configContext?.configInput, {pointsonly: false})}>Generate</Button>
+                        <Button onClick={() => configContext?.processInput(configContext?.configInput, {pointsOnly: false})}>Generate</Button>
                         <OptionContainer>
                             <GenOption optionId={'autogen'} label={'Auto-generate'} setSelected={configContext?.setAutoGen} checked={configContext?.autoGen}/>
                             <GenOption optionId={'debug'} label={'Debug'} setSelected={configContext?.setDebug} checked={configContext?.debug}/>
@@ -138,6 +141,7 @@ const Ergogen = () => {
                 </LeftSplitPane>
 
                 <RightSplitPane>
+                    {isProcessing && <Spinner />}
                     <StyledSplit
                         direction={"horizontal"}
                         sizes={[70, 30]}

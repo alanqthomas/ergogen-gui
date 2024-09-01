@@ -11,7 +11,7 @@ const ConfigEditor = ({className}: Props) => {
     const configContext = useConfigContext();
 
     // @ts-ignore
-    const {configInput, setConfigInput} = configContext;
+    const {configInput, setConfigInput, language} = configContext;
 
     const handleChange = async (textInput: string | undefined) => {
         if(!textInput) return null;
@@ -27,7 +27,8 @@ const ConfigEditor = ({className}: Props) => {
         <div className={className}>
             <Editor
                 height="70vh"
-                defaultLanguage="JSON"
+                defaultLanguage='yaml'
+                language={language}
                 onChange={handleChange}
                 value={configInput}
                 theme={"vs-dark"}

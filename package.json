@@ -23,6 +23,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-easy-panzoom": "^0.4.4",
+    "react-loader-spinner": "^6.1.6",
     "react-scripts": "5.0.1",
     "react-select": "^5.8.0",
     "react-split": "^2.0.14",
@@ -30,11 +31,12 @@
     "styled-components": "^6.1.8",
     "three-dxf": "^1.0.1",
     "typescript": "^5.4.5",
+    "use-debounce": "^10.0.3",
     "web-vitals": "^3.5.2",
     "yaml-js": "^0.3.1"
   },
   "scripts": {
-    "build-ergogen": "./patch/patch_ergogen.sh && cd node_modules/ergogen && yarn install && yarn run build && cp dist/ergogen.js ../../public/dependencies/ergogen.js",
+    "build-ergogen": "./patch/patch_ergogen.sh && cd node_modules/ergogen && yarn install && yarn run build && ../../patch/copy_deps.sh",
     "postinstall": "yarn run build-ergogen",
     "start": "react-scripts --openssl-legacy-provider start",
     "build": "react-scripts --openssl-legacy-provider build",
